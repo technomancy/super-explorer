@@ -5,6 +5,9 @@
 
 (fstruct now (x y world-x world-y world avatar tile))
 
+(define (index-of l x)
+  (for/or ([y l] [i (in-naturals)] #:when (equal? x y)) i))
+
 
 
 (fstruct tile (image walkable? offset))
@@ -21,6 +24,12 @@
                      (wood . ,(tile wood-block true 0))
                      (door . ,(tile door-tall-closed false 0))
                      (door-open . ,(tile door-tall-open true 0))))
+
+(define world-size-x 5)
+(define world-size-y 5)
+
+(define room-size-x 5)
+(define room-size-y 5)
 
 
 
@@ -61,37 +70,35 @@
   (or (not (<= 0 x (sub1 (vector-length (vector-ref room 0)))))
       (not (<= 0 y (sub1 (vector-length room))))))
 
-(define (allowed? room x y)
-  (and (not (off-edge? room x y))
-       (tile-walkable? (hash-ref tiles (vector-ref (vector-ref room y) x)))))
-
-(define (wrap now)
-  (let ([x-bound (sub1 (vector-length (vector-ref (now 'world) 0)))]
-        [y-bound (sub1 (vector-length (now 'world)))])
-    (cond [(negative? (now 'world-x)) (now 'world-x x-bound)]
-          [(negative? (now 'world-y)) (now 'world-y y-bound)]
-          [(> (now 'world-x) x-bound) (now 'world-x 0)]
-          [(> (now 'world-y) y-bound) (now 'world-y 0)]
-          [else now])))
+(define (walkable? room x y)
+  (tile-walkable? (hash-ref tiles (vector-ref (vector-ref room y) x))))
 
 (define (new-room now a-key)
-  (let ([x-bound (sub1 (vector-length (vector-ref (room-for now) 0)))]
-        [y-bound (sub1 (vector-length (room-for now)))])
-    (cond [(key=? a-key "left") ((wrap (now 'world-x (sub1 (now 'world-x)))) 'x x-bound)]
-          [(key=? a-key "right") ((wrap (now 'world-x (add1 (now 'world-x)))) 'x 0)]
-          [(key=? a-key "up") ((wrap (now 'world-y (sub1 (now 'world-y)))) 'y y-bound)]
-          [(key=? a-key "down") ((wrap (now 'world-y (add1 (now 'world-y)))) 'y 0)]
-          [else now])))
+  (cond [(key=? a-key "left") (if (zero? (now 'world-x))
+                                  now
+                                  (dict-update (now 'x (sub1 room-size-x))
+                                               'world-x sub1))]
+        [(key=? a-key "right") (if (= (now 'world-x) (sub1 world-size-x))
+                                   now
+                                   (dict-update (now 'x 0) 'world-x add1))]
+        [(key=? a-key "up") (if (zero? (now 'world-y))
+                                now
+                                (dict-update (now 'y (sub1 room-size-y))
+                                             'world-y sub1))]
+        [(key=? a-key "down") (if (= (now 'world-y) (sub1 world-size-y))
+                                  now
+                                  (dict-update (now 'y 0) 'world-y add1))]
+        [else now]))
 
 (define (move now a-key)
   (let ([new (new-place now a-key)])
-    (cond [(allowed? (room-for now) (new 'x) (new 'y)) new]
-          [(off-edge? (room-for new) (new 'x) (new 'y))
+    (cond [(off-edge? (room-for new) (new 'x) (new 'y))
            (let ([new (new-room now a-key)])
              (if (or (edit-mode? now)
-                     (allowed? (room-for new) (new 'x) (new 'y)))
+                     (walkable? (room-for new) (new 'x) (new 'y)))
                  new
                  now))]
+          [(walkable? (room-for now) (new 'x) (new 'y)) new]
           [(edit-mode? now) new]
           [else now])))
 
@@ -114,6 +121,11 @@
 (define (prev-tile now)
   (now 'tile (modulo (sub1 (now 'tile)) (length (hash-keys tiles)))))
 
+(define (tile-of now)
+  (now 'tile (index-of (hash-keys tiles)
+                       (vector-ref (vector-ref (room-for now) (now 'y))
+                                   (now 'x)))))
+
 (define (save now)
   (let ([filename (gui:put-file "Save to:")])
     (when filename
@@ -128,7 +140,7 @@
   (cond [(key=? a-key " ") (place now)] ; edit keys
         [(key=? a-key "[") (next-tile now)]
         [(key=? a-key "]") (prev-tile now)]
-        [(key=? a-key "0") (now 'tile 0)]
+        [(key=? a-key "\b") (tile-of now)]
         [(key=? a-key "\t") (switch-mode now)]
         [(key=? a-key "s") (save now)]
         [else (move now a-key)]))
