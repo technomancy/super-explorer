@@ -9,65 +9,32 @@
 
 (fstruct tile (image walkable? offset))
 
-(define grass (tile grass-block true 0))
-(define water (tile water-block false 0))
-(define chest (tile chest-closed false 100))
-(define dirt (tile dirt-block true 0))
-(define tree (tile (overlay tree-tall grass-block) false 0))
-
-(define stone (tile stone-block true 0))
-(define stone-tall (tile stone-block-tall false 0))
-(define wall (tile wall-block false 0))
-(define wall-tall (tile wall-block-tall false 0))
-(define wood (tile wood-block true 0))
-(define door (tile door-tall-closed false 0))
-(define door-open (tile door-tall-open true 0))
-
-(define tiles `#[,grass ,water ,chest ,dirt ,tree
-                        ,stone ,stone-tall ,wall ,wall-tall ,wood
-                        ,door ,door-open])
-
-
-
-(define room1 (vector (vector wall-tall wall-tall door-open wall-tall wall-tall)
-                      (vector grass grass dirt grass grass)
-                      (vector grass grass stone stone stone)
-                      (vector grass grass grass grass grass)
-                      (vector grass grass grass grass grass)))
-
-(define room2 (vector (vector water grass grass grass tree)
-                      (vector water water grass grass grass)
-                      (vector stone stone grass grass grass)
-                      (vector grass grass grass chest grass)
-                      (vector stone-tall stone grass grass grass)))
-
-(define room3 (vector (vector grass grass grass grass grass)
-                      (vector grass grass grass grass grass)
-                      (vector grass grass grass grass grass)
-                      (vector grass grass grass grass grass)
-                      (vector grass grass grass grass grass)))
-
-(define room4 (vector (vector grass grass grass grass grass)
-                      (vector grass grass grass grass grass)
-                      (vector grass grass grass grass grass)
-                      (vector grass grass grass grass grass)
-                      (vector grass grass grass grass grass)))
-
-(define init-world (vector (vector room1 room2)
-                           (vector room3 room4)))
-
-(define (room-for now)
-  (vector-ref (vector-ref (now 'world) (now 'world-y)) (now 'world-x)))
+(define tiles `#hash((grass . ,(tile grass-block true 0))
+                     (water . ,(tile water-block false 0))
+                     (chest . ,(tile chest-closed false 100))
+                     (dirt . ,(tile dirt-block true 0))
+                     (tree . ,(tile (overlay tree-tall grass-block) false 0))
+                     (stone . ,(tile stone-block true 0))
+                     (stone-tall . ,(tile stone-block-tall false 0))
+                     (wall . ,(tile wall-block false 0))
+                     (wall-tall . ,(tile wall-block-tall false 0))
+                     (wood . ,(tile wood-block true 0))
+                     (door . ,(tile door-tall-closed false 0))
+                     (door-open . ,(tile door-tall-open true 0))))
 
 
 
 (define (draw-row row)
-  (apply beside (map tile-image (vector->list row))))
+  (apply beside (for/list ([tile-name row])
+                  (tile-image (hash-ref tiles tile-name)))))
 
 (define (place-avatar row-image row avatar x y)
   (if (= y row)
       (overlay/xy avatar (* (- 0 x) (image-width avatar)) 0 row-image)
       row-image))
+
+(define (room-for now)
+  (vector-ref (vector-ref (now 'world) (now 'world-y)) (now 'world-x)))
 
 (define (draw now)
   (let ([x (now 'x)] [y (now 'y)]
@@ -96,7 +63,7 @@
 
 (define (allowed? room x y)
   (and (not (off-edge? room x y))
-       (tile-walkable? (vector-ref (vector-ref room y) x))))
+       (tile-walkable? (hash-ref tiles (vector-ref (vector-ref room y) x)))))
 
 (define (wrap now)
   (let ([x-bound (sub1 (vector-length (vector-ref (now 'world) 0)))]
@@ -138,14 +105,14 @@
 (define (place now)
   (when (edit-mode? now)
     (vector-set! (vector-ref (room-for now) (now 'y)) (now 'x)
-                 (vector-ref tiles (now 'tile))))
+                 (list-ref (hash-keys tiles) (now 'tile))))
   now)
 
 (define (next-tile now)
-  (now 'tile (modulo (add1 (now 'tile)) (add1 (vector-length tiles)))))
+  (now 'tile (modulo (add1 (now 'tile)) (length (hash-keys tiles)))))
 
 (define (prev-tile now)
-  (now 'tile (modulo (sub1 (now 'tile)) (vector-length tiles))))
+  (now 'tile (modulo (sub1 (now 'tile)) (length (hash-keys tiles)))))
 
 (define (save now)
   (let ([filename (gui:put-file "Save to:")])
@@ -154,10 +121,10 @@
         (delete-file filename))
       (call-with-output-file filename
         (λ (port)
-          (write (now 'world) port))))))
+          (write (now 'world) port)))))
+  now)
 
 (define (handle-key now a-key)
-  (printf "~s~n" a-key)
   (cond [(key=? a-key " ") (place now)] ; edit keys
         [(key=? a-key "[") (next-tile now)]
         [(key=? a-key "]") (prev-tile now)]
@@ -167,6 +134,7 @@
         [else (move now a-key)]))
 
 (module+ main
-  (big-bang (now 2 2 0 0 init-world character-princess-girl 0)
+  (big-bang (now 2 2 0 0 (call-with-input-file "world.rktd" read)
+                 character-princess-girl 0)
             (on-draw draw)
             (on-key handle-key)))
