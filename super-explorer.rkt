@@ -2,7 +2,7 @@
 (require 2htdp/universe 2htdp/image 2htdp/planetcute)
 (require "fstruct.rkt")
 
-(fstruct now (x y room character))
+(fstruct now (x y world-x world-y character))
 
 
 
@@ -23,17 +23,22 @@
 
 
 
-(define room1 (list (list water grass grass grass tree)
+(define room1 (list (list wall-tall wall-tall door wall-tall wall-tall)
+                    (list grass grass dirt grass grass)
+                    (list grass grass stone stone stone)
+                    (list grass grass grass grass grass)
+                    (list grass grass grass grass grass)))
+
+(define room2 (list (list water grass grass grass tree)
                     (list water water grass grass grass)
                     (list stone stone grass grass grass)
                     (list grass grass grass chest grass)
                     (list stone-tall stone grass grass grass)))
 
-(define room2 (list (list wall-tall wall-tall door wall-tall wall-tall)
-                    (list grass grass dirt grass grass)
-                    (list grass grass stone stone stone)
-                    (list grass grass grass grass grass)
-                    (list grass grass grass grass grass)))
+(define world `#[#[,room1 ,room2]])
+
+(define (room-for now)
+  (vector-ref (vector-ref world (now 'world-y)) (now 'world-x)))
 
 
 
@@ -47,7 +52,7 @@
 
 (define (draw now)
   (let ([x (now 'x)] [y (now 'y)]
-        [room (now 'room)] [character (now 'character)])
+        [room (room-for now)] [character (now 'character)])
     (for/fold ([scene (empty-scene 505 505)])
               ([row (range (length room))])
       (place-image (place-character (draw-row (list-ref room row))
@@ -71,23 +76,35 @@
   (and (not (off-edge? room x y))
        (tile-walkable? (list-ref (list-ref room y) x))))
 
+(define (wrap now)
+  (let ([x-bound (sub1 (vector-length (vector-ref world 0)))]
+        [y-bound (sub1 (vector-length world))])
+    (cond [(negative? (now 'world-x)) (now 'world-x x-bound)]
+          [(negative? (now 'world-y)) (now 'world-y y-bound)]
+          [(> (now 'world-x) x-bound) (now 'world-x 0)]
+          [(> (now 'world-y) y-bound) (now 'world-y 0)]
+          [else now])))
+
 (define (new-room now a-key)
-  (if (or (key=? a-key "left") (key=? a-key "right"))
-      ((now 'room (if (equal? (now 'room) room1) room2 room1))
-       'x (if (key=? a-key "left") 4 0))
-      now))
+  (let ([x-bound (sub1 (length (first (room-for now))))]
+        [y-bound (sub1 (length (room-for now)))])
+    (cond [(key=? a-key "left") ((wrap (now 'world-x (sub1 (now 'world-x)))) 'x x-bound)]
+          [(key=? a-key "right") ((wrap (now 'world-x (add1 (now 'world-x)))) 'x 0)]
+          [(key=? a-key "up") ((wrap (now 'world-y (sub1 (now 'world-y)))) 'y y-bound)]
+          [(key=? a-key "down") ((wrap (now 'world-y (add1 (now 'world-y)))) 'y 0)]
+          [else now])))
 
 (define (move now a-key)
   (let ([new (new-place now a-key)])
-    (cond [(allowed? (new 'room) (new 'x) (new 'y)) new]
-          [(off-edge? (new 'room) (new 'x) (new 'y))
+    (cond [(allowed? (room-for now) (new 'x) (new 'y)) new]
+          [(off-edge? (room-for new) (new 'x) (new 'y))
            (let ([new (new-room now a-key)])
-             (if (allowed? (new 'room) (new 'x) (new 'y))
+             (if (allowed? (room-for new) (new 'x) (new 'y))
                  new
                  now))]
           [else now])))
 
 (module+ main
-  (big-bang (now 2 2 room1 character-boy)
+  (big-bang (now 2 2 0 0 character-boy)
             (on-draw draw)
             (on-key move)))
