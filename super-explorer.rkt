@@ -1,5 +1,5 @@
 #lang racket
-(require 2htdp/universe 2htdp/image 2htdp/planetcute)
+(require 2htdp/universe 2htdp/image 2htdp/planetcute racket/vector)
 (require (prefix-in gui: racket/gui) racket/serialize)           ; for save
 (require "fstruct.rkt")
 
@@ -7,6 +7,15 @@
 
 (define (index-of l x)
   (for/or ([y l] [i (in-naturals)] #:when (equal? x y)) i))
+
+(define (vector-nested-set v indexes new) ; booooo no persistent vectors
+  (let ([v (vector-copy v)])
+    (vector-set! v (first indexes)
+                 (if (empty? (rest indexes))
+                     new
+                     (vector-nested-set (vector-ref v (first indexes))
+                                        (rest indexes) new)))
+    v))
 
 
 
@@ -110,10 +119,10 @@
                    selector)))
 
 (define (place now)
-  (when (edit-mode? now)
-    (vector-set! (vector-ref (room-for now) (now 'y)) (now 'x)
-                 (list-ref (hash-keys tiles) (now 'tile))))
-  now)
+  (if (edit-mode? now)
+    (now 'world (vector-nested-set (now 'world) (map now '(world-y world-x y x))
+                                   (list-ref (hash-keys tiles) (now 'tile))))
+    now))
 
 (define (next-tile now)
   (now 'tile (modulo (add1 (now 'tile)) (length (hash-keys tiles)))))
