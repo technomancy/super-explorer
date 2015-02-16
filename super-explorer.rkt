@@ -137,7 +137,7 @@
           [(not (walkable? (now 'world) (new '(player x)) (new '(player y))))
            now]
           [else (move-to-item new now a-key (item-at new
-                                                     (new '(player x)) 
+                                                     (new '(player x))
                                                      (new '(player y))))])))
 
 
@@ -154,6 +154,13 @@
                                      (list-ref (hash-keys tiles) (now 'tile))))
       now))
 
+(define (place-item now)
+  (if (edit-mode? now)
+      (let ([star (item yellow-star (now '(player x)) (now '(player y))
+                        true false)])
+        (dict-update now 'items (curry cons star)))
+      now))
+
 (define (next-tile now)
   (now 'tile (modulo (add1 (now 'tile)) (length (hash-keys tiles)))))
 
@@ -163,7 +170,7 @@
 (define (tile-of now)
   (now 'tile (index-of (hash-keys tiles)
                        (vector-ref (vector-ref (now 'world)
-                                               (now '(player y))) 
+                                               (now '(player y)))
                                    (now '(player x))))))
 
 (define (save now)
@@ -178,6 +185,7 @@
 
 (define (handle-key now a-key)
   (cond [(key=? a-key " ") (place now)] ; edit keys
+        [(key=? a-key "`") (place-item now)]
         [(key=? a-key "[") (next-tile now)]
         [(key=? a-key "]") (prev-tile now)]
         [(key=? a-key "\b") (tile-of now)]
