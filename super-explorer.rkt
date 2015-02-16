@@ -50,15 +50,12 @@
 
 
 
-(define (draw-row row)
-  (apply beside (for/list ([tile-name row])
-                  (tile-image (hash-ref tiles tile-name)))))
-
-(define (place-item row-image row item)
-  (if (= (item 'y) row)
-      (overlay/xy (item 'image) (* (- 0 (item 'x)) (image-width (item 'image)))
-                  0 row-image)
-      row-image))
+(define (draw-row row-tiles items)
+  (for/fold ([image (apply beside (for/list ([tile-name row-tiles])
+                                    (tile-image (hash-ref tiles tile-name))))])
+            ([item items])
+    (overlay/xy (item 'image) (* (- 0 (item 'x)) (image-width (item 'image)))
+                0 image)))
 
 (define (room-for now item)
   (vector-ref (vector-ref (now 'world) (item 'world-y)) (item 'world-x)))
@@ -66,14 +63,17 @@
 (define (same-room? item1 item2)
   (and (= (item1 'world-x) (item2 'world-x)) (= (item1 'world-y) (item2 'world-y))))
 
+(define (same-row? item1 item2)
+  (and (same-room? item1 item2) (= (item1 'y) (item2 'y))))
+
 (define (draw now)
-  (let ([room (room-for now (now 'player))])
+  (let ([room (room-for now (now 'player))]
+        [items (filter (curry same-room? (now 'player)) (now 'items))])
     (for*/fold ([scene (empty-scene 505 505)])
-               ([row (range (vector-length room))]
-                [item (list (item yellow-star 3 3 0 0) (now 'player)
-                            ;; (filter (curry same-room? (now 'player)) (now 'items))
-                            )])
-      (place-image (place-item (draw-row (vector-ref room row)) row item)
+               ([row (range (vector-length room))])
+      (place-image (draw-row (vector-ref room row)
+                             (filter (lambda (item) (= row (item 'y)))
+                                     (cons (now 'player) items)))
                    252 (+ 101 (* 80 row)) scene))))
 
 
