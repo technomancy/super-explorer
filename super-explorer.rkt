@@ -29,7 +29,6 @@
 
 (define tiles `#hash((grass . ,(tile grass-block true 0))
                      (water . ,(tile water-block false 0))
-                     (chest . ,(tile chest-closed false 100))
                      (dirt . ,(tile dirt-block true 0))
                      (tree . ,(tile (overlay tree-tall grass-block) false 0))
                      (stone . ,(tile stone-block true 0))
@@ -46,7 +45,10 @@
 (define room-size-x 5)
 (define room-size-y 5)
 
-(fstruct item (image x y pushable? pick-up?))
+(fstruct item (image x y pushable? combine))
+
+(define (put-in-chest item-in chest)
+  (item chest-closed (chest 'x) (chest 'y) false false))
 
 
 
@@ -119,16 +121,21 @@
         (first is))))
 
 (define (move-push-try item now old a-key)
-  (let ([new-item (new-place item a-key)])
-    (if (and (walkable? (now 'world) (new-item 'x) (new-item 'y))
-             (not (item-at now (new-item 'x) (new-item 'y))))
-        (now 'items (cons new-item (remove item (now 'items))))
-        old)))
+  (let* ([new-item (new-place item a-key)]
+         [item-at-new (item-at now (new-item 'x) (new-item 'y))])
+    (cond [(and (walkable? (now 'world) (new-item 'x) (new-item 'y))
+                (not item-at-new))
+           (now 'items (cons new-item (remove item (now 'items))))]
+          [(and item-at-new (item-combine item-at-new)
+                ((item-combine item-at-new) item item-at-new))
+           (now 'items (cons ((item-combine item-at-new) item item-at-new)
+                             (remove item-at-new (remove item (now 'items)))))]
+          [else old])))
 
 (define (move-to-item now old a-key item)
   (cond [(not item) now]
         [(item-pushable? item) (move-push-try item now old a-key)]
-        [else now]))
+        [else old]))
 
 (define (move now a-key)
   (let ([new (now 'player (new-place (now 'player) a-key))])
@@ -156,9 +163,9 @@
 
 (define (place-item now)
   (if (edit-mode? now)
-      (let ([star (item yellow-star (now '(player x)) (now '(player y))
-                        true false)])
-        (dict-update now 'items (curry cons star)))
+      (let ([placed (item gem-blue (now '(player x)) (now '(player y))
+                          true false)])
+        (dict-update now 'items (curry cons placed)))
       now))
 
 (define (next-tile now)
@@ -193,10 +200,10 @@
         [(key=? a-key "s") (save now)]
         [else (move now a-key)]))
 
-(define player (item character-princess-girl 2 2 false false))
-
 (module+ main
-  (big-bang (now player (call-with-input-file "world.rktd" read) 0
-                 (list (item yellow-star 4 2 true false)))
+  (big-bang (now (item character-princess-girl 2 2 false false)
+                 (call-with-input-file "world.rktd" read) 0
+                 (list (item gem-blue 3 2 true false)
+                       (item chest-open 13 12 false put-in-chest)))
             (on-draw draw)
             (on-key handle-key)))
