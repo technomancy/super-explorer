@@ -65,11 +65,10 @@
               (vector-take (vector-drop world (truncate-to (item 'y) room-size-y)) room-size-y)))
 
 (define (same-room? item1 item2)
-  (and (= (/ (item1 'x) room-size-x) (/ (item2 'x) room-size-x))
-       (= (/ (item1 'y) room-size-y) (/ (item2 'y) room-size-y))))
+  (and (= (quotient (item1 'x) room-size-x) (quotient (item2 'x) room-size-x))
+       (= (quotient (item1 'y) room-size-y) (quotient (item2 'y) room-size-y))))
 
 (define (draw now)
-  (printf "~s~n" (room-for (now 'world) (now 'player)))
   (let* ([room (room-for (now 'world) (now 'player))]
          [items (filter (curry same-room? (now 'player)) (now 'items))])
     (for*/fold ([scene (empty-scene 505 505)])
@@ -84,12 +83,15 @@
 (define (edit-mode? now)
   (equal? selector (now '(player image))))
 
-(define (new-place now a-key)
-  (cond [(key=? a-key "left") (now '(player x) (sub1 (now '(player x))))]
-        [(key=? a-key "right") (now '(player x) (add1 (now '(player x))))]
-        [(key=? a-key "up") (now '(player y) (sub1 (now '(player y))))]
-        [(key=? a-key "down") (now '(player y) (add1 (now '(player y))))]
-        [else now]))
+(define (out-of-bounds? item)
+  (or (> (item 'x) world-size-x) (> (item 'y) world-size-y)))
+
+(define (new-place item a-key)
+  (cond [(key=? a-key "left") (dict-update item 'x sub1)]
+        [(key=? a-key "right") (dict-update item 'x add1)]
+        [(key=? a-key "up") (dict-update item 'y sub1)]
+        [(key=? a-key "down") (dict-update item 'y add1)]
+        [else item]))
 
 (define (walkable? world x y)
   (tile-walkable? (hash-ref tiles (vector-ref (vector-ref world y) x))))
@@ -109,11 +111,34 @@
                                   (dict-update-in now '(player y) add1))]
         [else now]))
 
+(define (item-at now x y)
+  (let ([is (filter (lambda (i) (and (= x (i 'x)) (= y (i 'y))))
+                    (now 'items))])
+    (if (empty? is)
+        false
+        (first is))))
+
+(define (move-push-try item now old a-key)
+  (let ([new-item (new-place item a-key)])
+    (if (and (walkable? (now 'world) (new-item 'x) (new-item 'y))
+             (not (item-at now (new-item 'x) (new-item 'y))))
+        (now 'items (cons new-item (remove item (now 'items))))
+        old)))
+
+(define (move-to-item now old a-key item)
+  (cond [(not item) now]
+        [(item-pushable? item) (move-push-try item now old a-key)]
+        [else now]))
+
 (define (move now a-key)
-  (let ([new (new-place now a-key)])
-    (cond [(walkable? (now 'world) (new '(player x)) (new '(player y))) new]
+  (let ([new (now 'player (new-place (now 'player) a-key))])
+    (cond [(out-of-bounds? (new 'player)) now]
           [(edit-mode? now) new]
-          [else now])))
+          [(not (walkable? (now 'world) (new '(player x)) (new '(player y))))
+           now]
+          [else (move-to-item new now a-key (item-at new
+                                                     (new '(player x)) 
+                                                     (new '(player y))))])))
 
 
 
@@ -164,6 +189,6 @@
 
 (module+ main
   (big-bang (now player (call-with-input-file "world.rktd" read) 0
-                 (list (item yellow-star 3 3 true false)))
+                 (list (item yellow-star 4 2 true false)))
             (on-draw draw)
             (on-key handle-key)))
