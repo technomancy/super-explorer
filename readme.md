@@ -1,9 +1,17 @@
 # Super Explorer
 
+<img src="http://p.hagelb.org/super-explorer.png" alt="screenshot" />
+
 Explore the world, in Racket.
 
-Arrow keys. Tab to toggle edit mode. Brackets to go back and forth to
-select the tile to place; space to place it. S to save.
+Arrow keys to move, `s` to save.
+
+Edit mode:
+* `tab` to toggle
+* `space` to place tile
+* `backspace` to grab current tile
+* `[` and `]` to cycle through tiles
+* `1` and `2` to place items
 
 ## License
 
