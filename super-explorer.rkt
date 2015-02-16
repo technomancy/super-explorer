@@ -42,8 +42,8 @@
 (define world-size-x 25)
 (define world-size-y 25)
 
-(define room-size-x 5)
-(define room-size-y 5)
+(define room-size-x 7)
+(define room-size-y 7)
 
 (fstruct item (image x y pushable? combine))
 
@@ -73,12 +73,12 @@
 (define (draw now)
   (let* ([room (room-for (now 'world) (now 'player))]
          [items (filter (curry same-room? (now 'player)) (now 'items))])
-    (for*/fold ([scene (empty-scene 505 505)])
+    (for*/fold ([scene (empty-scene (* 101 room-size-x) (* 101 room-size-y))])
                ([row (range (vector-length room))])
       (place-image (draw-row (vector-ref room row)
                              (filter (lambda (item) (= row (modulo (item 'y) room-size-x)))
                                      (cons (now 'player) items)))
-                   252 (+ 101 (* 80 row)) scene))))
+                   (/ (* 101 room-size-x) 2) (+ 101 (* 80 row)) scene))))
 
 
 
