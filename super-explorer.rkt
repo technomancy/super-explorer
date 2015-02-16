@@ -40,13 +40,13 @@
                      (door . ,(tile door-tall-closed false 0))
                      (door-open . ,(tile door-tall-open true 0))))
 
-(define world-size-x 5)
-(define world-size-y 5)
+(define world-size-x 25)
+(define world-size-y 25)
 
 (define room-size-x 5)
 (define room-size-y 5)
 
-(fstruct item (image x y world-x world-y))
+(fstruct item (image x y pushable? pick-up?))
 
 
 
@@ -54,25 +54,28 @@
   (for/fold ([image (apply beside (for/list ([tile-name row-tiles])
                                     (tile-image (hash-ref tiles tile-name))))])
             ([item items])
-    (overlay/xy (item 'image) (* (- 0 (item 'x)) (image-width (item 'image)))
+    (overlay/xy (item 'image) (* (- 0 (modulo (item 'x) room-size-x)) (image-width (item 'image)))
                 0 image)))
 
-(define (room-for now item)
-  (vector-ref (vector-ref (now 'world) (item 'world-y)) (item 'world-x)))
+(define (truncate-to x y)
+  (* (quotient x y) y))
+
+(define (room-for world item)
+  (vector-map (lambda (row) (vector-take (vector-drop row (truncate-to (item 'x) room-size-x)) room-size-x))
+              (vector-take (vector-drop world (truncate-to (item 'y) room-size-y)) room-size-y)))
 
 (define (same-room? item1 item2)
-  (and (= (item1 'world-x) (item2 'world-x)) (= (item1 'world-y) (item2 'world-y))))
-
-(define (same-row? item1 item2)
-  (and (same-room? item1 item2) (= (item1 'y) (item2 'y))))
+  (and (= (/ (item1 'x) room-size-x) (/ (item2 'x) room-size-x))
+       (= (/ (item1 'y) room-size-y) (/ (item2 'y) room-size-y))))
 
 (define (draw now)
-  (let ([room (room-for now (now 'player))]
-        [items (filter (curry same-room? (now 'player)) (now 'items))])
+  (printf "~s~n" (room-for (now 'world) (now 'player)))
+  (let* ([room (room-for (now 'world) (now 'player))]
+         [items (filter (curry same-room? (now 'player)) (now 'items))])
     (for*/fold ([scene (empty-scene 505 505)])
                ([row (range (vector-length room))])
       (place-image (draw-row (vector-ref room row)
-                             (filter (lambda (item) (= row (item 'y)))
+                             (filter (lambda (item) (= row (modulo (item 'y) room-size-x)))
                                      (cons (now 'player) items)))
                    252 (+ 101 (* 80 row)) scene))))
 
@@ -88,42 +91,27 @@
         [(key=? a-key "down") (now '(player y) (add1 (now '(player y))))]
         [else now]))
 
-(define (off-edge? room x y)
-  (or (not (<= 0 x (sub1 (vector-length (vector-ref room 0)))))
-      (not (<= 0 y (sub1 (vector-length room))))))
-
-(define (walkable? room x y)
-  (tile-walkable? (hash-ref tiles (vector-ref (vector-ref room y) x))))
+(define (walkable? world x y)
+  (tile-walkable? (hash-ref tiles (vector-ref (vector-ref world y) x))))
 
 (define (new-room now a-key)
-  (cond [(key=? a-key "left") (if (zero? (now '(player world-x)))
+  (cond [(key=? a-key "left") (if (zero? (now '(player x)))
                                   now
-                                  (dict-update-in (now '(player x) (sub1 room-size-x))
-                                                  '(player world-x) sub1))]
-        [(key=? a-key "right") (if (= (now '(player world-x)) (sub1 world-size-x))
+                                  (dict-update-in now '(player x) sub1))]
+        [(key=? a-key "right") (if (= (now '(player x)) (sub1 world-size-x))
                                    now
-                                   (dict-update-in (now '(player x) 0) '(player world-x) add1))]
-        [(key=? a-key "up") (if (zero? (now '(player world-y)))
+                                   (dict-update-in now '(player x) add1))]
+        [(key=? a-key "up") (if (zero? (now '(player y)))
                                 now
-                                (dict-update-in (now '(player y) (sub1 room-size-y))
-                                                '(player world-y) sub1))]
-        [(key=? a-key "down") (if (= (now '(player world-y)) (sub1 world-size-y))
+                                (dict-update-in now '(player y) sub1))]
+        [(key=? a-key "down") (if (= (now '(player y)) (sub1 world-size-y))
                                   now
-                                  (dict-update-in (now '(player y) 0) '(player world-y) add1))]
+                                  (dict-update-in now '(player y) add1))]
         [else now]))
 
 (define (move now a-key)
   (let ([new (new-place now a-key)])
-    (cond [(off-edge? (room-for new (new 'player))
-                      (new '(player x)) (new '(player y)))
-           (let ([new (new-room now a-key)])
-             (if (or (edit-mode? now)
-                     (walkable? (room-for new (new 'player))
-                                (new '(player x)) (new '(player y))))
-                 new
-                 now))]
-          [(walkable? (room-for now (now 'player))
-                      (new '(player x)) (new '(player y))) new]
+    (cond [(walkable? (now 'world) (new '(player x)) (new '(player y))) new]
           [(edit-mode? now) new]
           [else now])))
 
@@ -137,8 +125,7 @@
 
 (define (place now)
   (if (edit-mode? now)
-      (now 'world (vector-nested-set (now 'world) (map (now 'player)
-                                                       '(world-y world-x y x))
+      (now 'world (vector-nested-set (now 'world) (map (now 'player) '(y x))
                                      (list-ref (hash-keys tiles) (now 'tile))))
       now))
 
@@ -150,8 +137,8 @@
 
 (define (tile-of now)
   (now 'tile (index-of (hash-keys tiles)
-                       (vector-ref (vector-ref (room-for now (now '(player)))
-                                               (now '(player y)))
+                       (vector-ref (vector-ref (now 'world)
+                                               (now '(player y))) 
                                    (now '(player x))))))
 
 (define (save now)
@@ -173,10 +160,10 @@
         [(key=? a-key "s") (save now)]
         [else (move now a-key)]))
 
-(define player (item character-princess-girl 2 2 1 1))
+(define player (item character-princess-girl 2 2 false false))
 
 (module+ main
   (big-bang (now player (call-with-input-file "world.rktd" read) 0
-                 (list (item yellow-star 3 3 0 0)))
+                 (list (item yellow-star 3 3 true false)))
             (on-draw draw)
             (on-key handle-key)))
