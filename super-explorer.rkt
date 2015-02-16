@@ -3,7 +3,7 @@
 (require (prefix-in gui: racket/gui) racket/serialize)           ; for save
 (require "fstruct.rkt")
 
-(fstruct now (x y world-x world-y world avatar tile))
+(fstruct now (player world tile items))
 
 (define (index-of l x)
   (for/or ([y l] [i (in-naturals)] #:when (equal? x y)) i))
@@ -16,6 +16,12 @@
                      (vector-nested-set (vector-ref v (first indexes))
                                         (rest indexes) new)))
     v))
+
+(define (dict-update-in d ks f . args)
+  (if (empty? (rest ks))
+      (dict-update d (first ks) (λ (x) (apply f x args)))
+      (dict-set d (first ks) (apply dict-update-in (dict-ref d (first ks))
+                                    (rest ks) f args))))
 
 
 
@@ -40,40 +46,47 @@
 (define room-size-x 5)
 (define room-size-y 5)
 
+(fstruct item (image x y world-x world-y))
+
 
 
 (define (draw-row row)
   (apply beside (for/list ([tile-name row])
                   (tile-image (hash-ref tiles tile-name)))))
 
-(define (place-avatar row-image row avatar x y)
-  (if (= y row)
-      (overlay/xy avatar (* (- 0 x) (image-width avatar)) 0 row-image)
+(define (place-item row-image row item)
+  (if (= (item 'y) row)
+      (overlay/xy (item 'image) (* (- 0 (item 'x)) (image-width (item 'image)))
+                  0 row-image)
       row-image))
 
-(define (room-for now)
-  (vector-ref (vector-ref (now 'world) (now 'world-y)) (now 'world-x)))
+(define (room-for now item)
+  (vector-ref (vector-ref (now 'world) (item 'world-y)) (item 'world-x)))
+
+(define (same-room? item1 item2)
+  (and (= (item1 'world-x) (item2 'world-x)) (= (item1 'world-y) (item2 'world-y))))
 
 (define (draw now)
-  (let ([x (now 'x)] [y (now 'y)]
-        [room (room-for now)] [avatar (now 'avatar)])
-    (for/fold ([scene (empty-scene 505 505)])
-              ([row (range (vector-length room))])
-      (place-image (place-avatar (draw-row (vector-ref room row))
-                                 row avatar x y)
+  (let ([room (room-for now (now 'player))])
+    (for*/fold ([scene (empty-scene 505 505)])
+               ([row (range (vector-length room))]
+                [item (list (item yellow-star 3 3 0 0) (now 'player)
+                            ;; (filter (curry same-room? (now 'player)) (now 'items))
+                            )])
+      (place-image (place-item (draw-row (vector-ref room row)) row item)
                    252 (+ 101 (* 80 row)) scene))))
 
 
 
 (define (edit-mode? now)
-  (equal? selector (now 'avatar)))
+  (equal? selector (now '(player image))))
 
 (define (new-place now a-key)
-     (cond [(key=? a-key "left") (now 'x (sub1 (now 'x)))]
-           [(key=? a-key "right") (now 'x (add1 (now 'x)))]
-           [(key=? a-key "up") (now 'y (sub1 (now 'y)))]
-           [(key=? a-key "down") (now 'y (add1 (now 'y)))]
-           [else now]))
+  (cond [(key=? a-key "left") (now '(player x) (sub1 (now '(player x))))]
+        [(key=? a-key "right") (now '(player x) (add1 (now '(player x))))]
+        [(key=? a-key "up") (now '(player y) (sub1 (now '(player y))))]
+        [(key=? a-key "down") (now '(player y) (add1 (now '(player y))))]
+        [else now]))
 
 (define (off-edge? room x y)
   (or (not (<= 0 x (sub1 (vector-length (vector-ref room 0)))))
@@ -83,46 +96,51 @@
   (tile-walkable? (hash-ref tiles (vector-ref (vector-ref room y) x))))
 
 (define (new-room now a-key)
-  (cond [(key=? a-key "left") (if (zero? (now 'world-x))
+  (cond [(key=? a-key "left") (if (zero? (now '(player world-x)))
                                   now
-                                  (dict-update (now 'x (sub1 room-size-x))
-                                               'world-x sub1))]
-        [(key=? a-key "right") (if (= (now 'world-x) (sub1 world-size-x))
+                                  (dict-update-in (now '(player x) (sub1 room-size-x))
+                                                  '(player world-x) sub1))]
+        [(key=? a-key "right") (if (= (now '(player world-x)) (sub1 world-size-x))
                                    now
-                                   (dict-update (now 'x 0) 'world-x add1))]
-        [(key=? a-key "up") (if (zero? (now 'world-y))
+                                   (dict-update-in (now '(player x) 0) '(player world-x) add1))]
+        [(key=? a-key "up") (if (zero? (now '(player world-y)))
                                 now
-                                (dict-update (now 'y (sub1 room-size-y))
-                                             'world-y sub1))]
-        [(key=? a-key "down") (if (= (now 'world-y) (sub1 world-size-y))
+                                (dict-update-in (now '(player y) (sub1 room-size-y))
+                                                '(player world-y) sub1))]
+        [(key=? a-key "down") (if (= (now '(player world-y)) (sub1 world-size-y))
                                   now
-                                  (dict-update (now 'y 0) 'world-y add1))]
+                                  (dict-update-in (now '(player y) 0) '(player world-y) add1))]
         [else now]))
 
 (define (move now a-key)
   (let ([new (new-place now a-key)])
-    (cond [(off-edge? (room-for new) (new 'x) (new 'y))
+    (cond [(off-edge? (room-for new (new 'player))
+                      (new '(player x)) (new '(player y)))
            (let ([new (new-room now a-key)])
              (if (or (edit-mode? now)
-                     (walkable? (room-for new) (new 'x) (new 'y)))
+                     (walkable? (room-for new (new 'player))
+                                (new '(player x)) (new '(player y))))
                  new
                  now))]
-          [(walkable? (room-for now) (new 'x) (new 'y)) new]
+          [(walkable? (room-for now (now 'player))
+                      (new '(player x)) (new '(player y))) new]
           [(edit-mode? now) new]
           [else now])))
 
 
 
 (define (switch-mode now)
-  (now 'avatar (if (edit-mode? now)
-                   character-princess-girl
-                   selector)))
+  (now '(player image)
+       (if (edit-mode? now)
+           character-princess-girl
+           selector)))
 
 (define (place now)
   (if (edit-mode? now)
-    (now 'world (vector-nested-set (now 'world) (map now '(world-y world-x y x))
-                                   (list-ref (hash-keys tiles) (now 'tile))))
-    now))
+      (now 'world (vector-nested-set (now 'world) (map (now 'player)
+                                                       '(world-y world-x y x))
+                                     (list-ref (hash-keys tiles) (now 'tile))))
+      now))
 
 (define (next-tile now)
   (now 'tile (modulo (add1 (now 'tile)) (length (hash-keys tiles)))))
@@ -132,8 +150,9 @@
 
 (define (tile-of now)
   (now 'tile (index-of (hash-keys tiles)
-                       (vector-ref (vector-ref (room-for now) (now 'y))
-                                   (now 'x)))))
+                       (vector-ref (vector-ref (room-for now (now '(player)))
+                                               (now '(player y)))
+                                   (now '(player x))))))
 
 (define (save now)
   (let ([filename (gui:put-file "Save to:")])
@@ -154,8 +173,10 @@
         [(key=? a-key "s") (save now)]
         [else (move now a-key)]))
 
+(define player (item character-princess-girl 2 2 1 1))
+
 (module+ main
-  (big-bang (now 2 2 0 0 (call-with-input-file "world.rktd" read)
-                 character-princess-girl 0)
+  (big-bang (now player (call-with-input-file "world.rktd" read) 0
+                 (list (item yellow-star 3 3 0 0)))
             (on-draw draw)
             (on-key handle-key)))
