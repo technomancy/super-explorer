@@ -39,11 +39,11 @@
                      (door . ,(tile door-tall-closed false 0))
                      (door-open . ,(tile door-tall-open true 0))))
 
-(define world-size-x 25)
-(define world-size-y 25)
+(define world-size-x 20)
+(define world-size-y 20)
 
-(define room-size-x 5)
-(define room-size-y 5)
+(define room-size-x 10)
+(define room-size-y 10)
 
 (fstruct item (image x y pushable? combine))
 
@@ -72,15 +72,20 @@
        (= (quotient (item1 'y) room-size-y) (quotient (item2 'y) room-size-y))))
 
 (define (draw now)
-  (let ([room (room-for (now 'world) (now 'player))]
-        [items (filter (curry same-room? (now 'player)) (now 'items))])
-    (for/fold ([scene (empty-scene (* 101 room-size-x) (* 101 room-size-y))])
-              ([row (range (vector-length room))])
-      (place-image (draw-row (vector-ref room row)
-                             (filter (lambda (item)
-                                       (= row (modulo (item 'y) room-size-y)))
-                                     (cons (now 'player) items)))
-                   (/ (* 101 room-size-x) 2) (+ 101 (* 80 row)) scene))))
+  (with-handlers ([exn:fail?
+                   (λ (e)
+                     (printf "error ~s~n" e)
+                     (printf "~s~n" now)
+                     (empty-scene 10 10))])
+    (let ([room (room-for (now 'world) (now 'player))]
+          [items (filter (curry same-room? (now 'player)) (now 'items))])
+      (for/fold ([scene (empty-scene (* 101 room-size-x) (* 101 room-size-y))])
+                ([row (range (vector-length room))])
+        (place-image (draw-row (vector-ref room row)
+                               (filter (lambda (item)
+                                         (= row (modulo (item 'y) room-size-y)))
+                                       (cons (now 'player) items)))
+                     (/ (* 101 room-size-x) 2) (+ 101 (* 80 row)) scene)))))
 
 
 
@@ -148,6 +153,12 @@
       (dict-update now 'items (curry cons item))
       now))
 
+(define (delete-item now)
+  (if (edit-mode? now)
+      (let ([item (item-at now (now '(player x)) (now '(player y)))])
+        (now 'items (remove item (now 'items))))
+      now))
+
 (define (next-tile now amt)
   (now 'tile (modulo (+ amt (now 'tile)) (length (hash-keys tiles)))))
 
@@ -157,24 +168,36 @@
                                                (now '(player y)))
                                    (now '(player x))))))
 
-(define (save now)
-  (let ([filename (gui:put-file "Save to:")])
-    (when filename ; TODO: need to save item state too
-      (when (file-exists? filename) (delete-file filename))
-      (call-with-output-file filename (curry write (now 'world)))))
-  now)
+(define (save old)
+  (let ([filename (gui:get-file "Load:")])
+    (if filename
+        (call-with-output-file filename (curry write (now 'world)))
+        old)))
+
+(define (restore)
+  (now (item character-princess-girl 2 2 false false)
+       (call-with-input-file "world.rktd" read) 0
+       (list (item gem-blue 3 2 true false)
+             (item chest-open 13 12 false in-chest))))
 
 (define (handle-key now a-key)
-  (let ([x (now '(player x))] [y (now '(player y))])
-    (cond [(key=? a-key " ") (place now)] ; edit keys
-          [(key=? a-key "1") (place-item now (item gem-blue x y true false))]
-          [(key=? a-key "2") (place-item now (item chest-open x y #f in-chest))]
-          [(key=? a-key "[") (next-tile now 1)]
-          [(key=? a-key "]") (next-tile now -1)]
-          [(key=? a-key "\b") (tile-of now)]
-          [(key=? a-key "\t") (switch-mode now)]
-          [(key=? a-key "s") (save now)]
-          [else (move now a-key)])))
+  (with-handlers ([exn:fail?
+                   (λ (e)
+                     (printf "error ~s~n" e)
+                     (printf "~s ~s~n" now a-key)
+                     now)])
+    (let ([x (now '(player x))] [y (now '(player y))])
+      (cond [(key=? a-key " ") (place now)] ; edit keys
+            [(key=? a-key "1") (place-item now (item gem-blue x y true false))]
+            [(key=? a-key "2") (place-item now (item chest-open x y #f in-chest))]
+            [(key=? a-key "\b") (delete-item now)]
+            [(key=? a-key "[") (next-tile now 1)]
+            [(key=? a-key "]") (next-tile now -1)]
+            [(key=? a-key "`") (tile-of now)]
+            [(key=? a-key "\t") (switch-mode now)]
+            [(key=? a-key "s") (save now)]
+            [(key=? a-key "r") (restore)]
+            [else (move now a-key)]))))
 
 (module+ main
   (big-bang (now (item character-princess-girl 2 2 false false)
