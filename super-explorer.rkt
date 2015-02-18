@@ -204,10 +204,20 @@
             [(key=? a-key "r") (restore now)]
             [else (move now a-key)]))))
 
+(define (undoable-big-bang init draw key-handler)
+  (let ([max-undo-size 10] [undo-key "z"])
+    (big-bang (list init)
+              (to-draw (compose draw first))
+              (on-key (lambda (states a-key)
+                        (if (and (key=? a-key undo-key) (> (length states) 1))
+                            (rest states)
+                            (cons (key-handler (first states) a-key)
+                                  (take states (min max-undo-size
+                                                    (length states))))))))))
+
 (module+ main
-  (big-bang (now (item character-princess-girl 2 2 false false)
-                 (call-with-input-file "world.rktd" read) 0
-                 (list (item gem-blue 3 2 true false)
-                       (item chest-open 13 12 false in-chest)))
-            (on-draw draw)
-            (on-key handle-key)))
+  (undoable-big-bang (now (item character-princess-girl 2 2 false false)
+                          (call-with-input-file "world.rktd" read) 0
+                          (list (item gem-blue 3 2 true false)
+                                (item chest-open 13 12 false in-chest)))
+                     draw handle-key))
