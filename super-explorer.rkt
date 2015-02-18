@@ -149,9 +149,10 @@
       now))
 
 (define (place-item now item)
-  (if (edit-mode? now)
-      (dict-update now 'items (curry cons item))
-      now))
+  (cond [(not (edit-mode? now)) now]
+        [(item-at now (now '(player x)) (now '(player y))) now]
+        [(not (walkable? (now 'world) (now '(player x)) (now '(player y)))) now]
+        [else (dict-update now 'items (curry cons item))]))
 
 (define (delete-item now)
   (if (edit-mode? now)
@@ -168,17 +169,21 @@
                                                (now '(player y)))
                                    (now '(player x))))))
 
-(define (save old)
-  (let ([filename (gui:get-file "Load:")])
-    (if filename
-        (call-with-output-file filename (curry write (now 'world)))
-        old)))
+(define (save now)
+  (let ([filename (gui:put-file "Save to:")])
+    (when filename ; TODO: need to save item state too
+      (when (file-exists? filename) (delete-file filename))
+      (call-with-output-file filename (curry write (now 'world)))))
+  now)
 
-(define (restore)
-  (now (item character-princess-girl 2 2 false false)
-       (call-with-input-file "world.rktd" read) 0
-       (list (item gem-blue 3 2 true false)
-             (item chest-open 13 12 false in-chest))))
+(define (restore old)
+  (let ([filename (gui:get-file "Save to:")])
+    (if filename
+        (now (item character-princess-girl 2 2 false false)
+             (call-with-input-file "world.rktd" read) 0
+             (list (item gem-blue 3 2 true false)
+                   (item chest-open 13 12 false in-chest)))
+        old)))
 
 (define (handle-key now a-key)
   (with-handlers ([exn:fail?
@@ -196,7 +201,7 @@
             [(key=? a-key "`") (tile-of now)]
             [(key=? a-key "\t") (switch-mode now)]
             [(key=? a-key "s") (save now)]
-            [(key=? a-key "r") (restore)]
+            [(key=? a-key "r") (restore now)]
             [else (move now a-key)]))))
 
 (module+ main
