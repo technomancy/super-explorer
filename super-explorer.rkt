@@ -72,20 +72,17 @@
        (= (quotient (item1 'y) room-size-y) (quotient (item2 'y) room-size-y))))
 
 (define (draw now)
-  (with-handlers ([exn:fail?
-                   (λ (e)
-                     (printf "error ~s~n" e)
-                     (printf "~s~n" now)
-                     (empty-scene 10 10))])
-    (let ([room (room-for (now 'world) (now 'player))]
-          [items (filter (curry same-room? (now 'player)) (now 'items))])
-      (for/fold ([scene (empty-scene (* 101 room-size-x) (* 101 room-size-y))])
-                ([row (range (vector-length room))])
-        (place-image (draw-row (vector-ref room row)
-                               (filter (lambda (item)
-                                         (= row (modulo (item 'y) room-size-y)))
-                                       (cons (now 'player) items)))
-                     (/ (* 101 room-size-x) 2) (+ 101 (* 80 row)) scene)))))
+  (let ([room (room-for (now 'world) (now 'player))]
+        [items (filter (curry same-room? (now 'player)) (now 'items))])
+    (when (= 12 (now '(player x)))
+      (/ 13 0))
+    (for/fold ([scene (empty-scene (* 101 room-size-x) (* 101 room-size-y))])
+              ([row (range (vector-length room))])
+      (place-image (draw-row (vector-ref room row)
+                             (filter (lambda (item)
+                                       (= row (modulo (item 'y) room-size-y)))
+                                     (cons (now 'player) items)))
+                   (/ (* 101 room-size-x) 2) (+ 101 (* 80 row)) scene))))
 
 
 
@@ -186,34 +183,41 @@
         old)))
 
 (define (handle-key now a-key)
-  (with-handlers ([exn:fail?
-                   (λ (e)
-                     (printf "error ~s~n" e)
-                     (printf "~s ~s~n" now a-key)
-                     now)])
-    (let ([x (now '(player x))] [y (now '(player y))])
-      (cond [(key=? a-key " ") (place now)] ; edit keys
-            [(key=? a-key "1") (place-item now (item gem-blue x y true false))]
-            [(key=? a-key "2") (place-item now (item chest-open x y #f in-chest))]
-            [(key=? a-key "\b") (delete-item now)]
-            [(key=? a-key "[") (next-tile now 1)]
-            [(key=? a-key "]") (next-tile now -1)]
-            [(key=? a-key "`") (tile-of now)]
-            [(key=? a-key "\t") (switch-mode now)]
-            [(key=? a-key "s") (save now)]
-            [(key=? a-key "r") (restore now)]
-            [else (move now a-key)]))))
+  (let ([x (now '(player x))] [y (now '(player y))])
+    (cond [(key=? a-key " ") (place now)] ; edit keys
+          [(key=? a-key "1") (place-item now (item gem-blue x y true false))]
+          [(key=? a-key "2") (place-item now (item chest-open x y #f in-chest))]
+          [(key=? a-key "\b") (delete-item now)]
+          [(key=? a-key "[") (next-tile now 1)]
+          [(key=? a-key "]") (next-tile now -1)]
+          [(key=? a-key "`") (tile-of now)]
+          [(key=? a-key "\t") (switch-mode now)]
+          [(key=? a-key "s") (save now)]
+          [(key=? a-key "r") (restore now)]
+          [else (move now a-key)])))
 
 (define (undoable-big-bang init draw key-handler)
   (let ([max-undo-size 10] [undo-key "z"])
     (big-bang (list init)
-              (to-draw (compose draw first))
-              (on-key (lambda (states a-key)
-                        (if (and (key=? a-key undo-key) (> (length states) 1))
-                            (rest states)
-                            (cons (key-handler (first states) a-key)
-                                  (take states (min max-undo-size
-                                                    (length states))))))))))
+              (to-draw (lambda (states)
+                         (with-handlers ([exn:fail?
+                                          (λ (e)
+                                            (printf "draw error ~s~n" e)
+                                            (rectangle (* 101 room-size-x)
+                                                       (* 101 room-size-y)
+                                                       "solid" "red"))])
+                           (draw (first states)))))
+              (on-key
+               (lambda (states a-key)
+                        (with-handlers ([exn:fail?
+                                         (λ (e)
+                                           (printf "error ~s~n" e)
+                                           states)])
+                          (if (and (key=? a-key undo-key) (> (length states) 1))
+                              (rest states)
+                              (cons (key-handler (first states) a-key)
+                                    (take states (min max-undo-size
+                                                      (length states)))))))))))
 
 (module+ main
   (undoable-big-bang (now (item character-princess-girl 2 2 false false)
