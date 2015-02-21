@@ -51,14 +51,19 @@
 (define (in-chest item-in chest)
   (item chest-closed (chest 'x) (chest 'y) false false))
 
+;; TODO: come up with a non-eval way to map image name -> image
+;; super gnarly because of reasons, but http://pasterack.org/pastes/45527
+(define get-image eval)
+
 
 
 (define (draw-row row-tiles items)
   (for/fold ([image (apply beside (for/list ([tile-name row-tiles])
                                     (tile-image (hash-ref tiles tile-name))))])
             ([item items])
-    (overlay/xy (item 'image) (* (- 0 (modulo (item 'x) room-size-x))
-                                 (image-width (item 'image)))
+    (overlay/xy (get-image (item 'image))
+                (* (- 0 (modulo (item 'x) room-size-x))
+                   (image-width (get-image (item 'image))))
                 0 image)))
 
 (define (truncate-to x y)
@@ -86,7 +91,7 @@
 
 
 (define (edit-mode? now)
-  (equal? selector (now '(player image))))
+  (equal? 'selector (now '(player image))))
 
 (define (out-of-bounds? item)
   (or (> (item 'x) world-size-x) (> (item 'y) world-size-y)))
@@ -112,8 +117,9 @@
                 (not item-at-new))
            (now 'items (cons new-item (remove item (now 'items))))]
           [(and item-at-new (item-combine item-at-new)
-                ((item-combine item-at-new) item item-at-new))
-           (now 'items (cons ((item-combine item-at-new) item item-at-new)
+                ((eval (item-combine item-at-new)) item item-at-new))
+           (now 'items (cons ((eval (item-combine item-at-new))
+                              item item-at-new)
                              (remove item-at-new (remove item (now 'items)))))]
           [else old])))
 
@@ -151,8 +157,8 @@
 (define (switch-mode now)
   (now '(player image)
        (if (edit-mode? now)
-           character-princess-girl
-           selector)))
+           'character-princess-girl
+           'selector)))
 
 (define (place now)
   (if (edit-mode? now)
@@ -185,7 +191,7 @@
   (let ([filename (gui:put-file "Save to:")])
     (when filename ; TODO: need to save item state too
       (when (file-exists? filename) (delete-file filename))
-      (call-with-output-file filename (curry write (now 'world)))))
+      (call-with-output-file filename (curry write (serialize now)))))
   now)
 
 (define (restore old)
@@ -194,7 +200,7 @@
         (now (item character-princess-girl 2 2 false false)
              (call-with-input-file "world.rktd" read) 0
              (list (item gem-blue 3 2 true false)
-                   (item chest-open 13 12 false in-chest))
+                   (item chest-open 13 12 false 'in-chest))
              #hash())
         old)))
 
@@ -238,8 +244,8 @@
 (module+ main
   (undoable-big-bang (now (item 'character-princess-girl 2 2 false false)
                           (call-with-input-file "world.rktd" read) 0
-                          (list (item gem-blue 3 2 true false)
-                                (item chest-open 13 12 false in-chest))
+                          (list (item 'gem-blue 3 2 true false)
+                                (item 'chest-open 13 12 false 'in-chest))
                           #hash(((13 15) . (curry teleport 17 17))
                                 ((17 15) . (curry grassify 17 13))))
                      draw handle-key))
