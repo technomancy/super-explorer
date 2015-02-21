@@ -3,7 +3,7 @@
 (require (prefix-in gui: racket/gui) racket/serialize)           ; for save
 (require "fstruct.rkt")
 
-(fstruct now (player world tile items))
+(fstruct now (player world tile items triggers))
 
 (define (index-of l x)
   (for/or ([y l] [i (in-naturals)] #:when (equal? x y)) i))
@@ -36,6 +36,7 @@
                      (wall . ,(tile wall-block false 0))
                      (wall-tall . ,(tile wall-block-tall false 0))
                      (wood . ,(tile wood-block true 0))
+                     (plain . ,(tile plain-block true 0))
                      (door . ,(tile door-tall-closed false 0))
                      (door-open . ,(tile door-tall-open true 0))))
 
@@ -74,8 +75,6 @@
 (define (draw now)
   (let ([room (room-for (now 'world) (now 'player))]
         [items (filter (curry same-room? (now 'player)) (now 'items))])
-    (when (= 12 (now '(player x)))
-      (/ 13 0))
     (for/fold ([scene (empty-scene (* 101 room-size-x) (* 101 room-size-y))])
               ([row (range (vector-length room))])
       (place-image (draw-row (vector-ref room row)
@@ -131,6 +130,19 @@
           [(not item-at-new) new]
           [else (move-to-item new now a-key item-at-new)])))
 
+(define (trigger-at now x y)
+  (dict-ref (now 'triggers) (list x y) false))
+
+(define (teleport x y now)
+  ((now '(player x) x) '(player y) y))
+
+(define (move-and-trigger now a-key)
+  (let* ([moved (move now a-key)]
+         [trigger (trigger-at moved (moved '(player x)) (moved '(player y)))])
+    (if trigger
+        ((eval trigger) moved)
+        moved)))
+
 
 
 (define (switch-mode now)
@@ -174,12 +186,13 @@
   now)
 
 (define (restore old)
-  (let ([filename (gui:get-file "Save to:")])
+  (let ([filename (gui:get-file "Restore:")])
     (if filename
         (now (item character-princess-girl 2 2 false false)
              (call-with-input-file "world.rktd" read) 0
              (list (item gem-blue 3 2 true false)
-                   (item chest-open 13 12 false in-chest)))
+                   (item chest-open 13 12 false in-chest))
+             #hash())
         old)))
 
 (define (handle-key now a-key)
@@ -194,7 +207,7 @@
           [(key=? a-key "\t") (switch-mode now)]
           [(key=? a-key "s") (save now)]
           [(key=? a-key "r") (restore now)]
-          [else (move now a-key)])))
+          [else (move-and-trigger now a-key)])))
 
 (define (undoable-big-bang init draw key-handler)
   (let ([max-undo-size 10] [undo-key "z"])
