@@ -189,7 +189,7 @@
 
 (define (save now)
   (let ([filename (gui:put-file "Save to:")])
-    (when filename ; TODO: need to save item state too
+    (when filename
       (when (file-exists? filename) (delete-file filename))
       (call-with-output-file filename (curry write (serialize now)))))
   now)
@@ -197,11 +197,7 @@
 (define (restore old)
   (let ([filename (gui:get-file "Restore:")])
     (if filename
-        (now (item character-princess-girl 2 2 false false)
-             (call-with-input-file "world.rktd" read) 0
-             (list (item gem-blue 3 2 true false)
-                   (item chest-open 13 12 false 'in-chest))
-             #hash())
+        (call-with-input-file "world.rktd" (compose deserialize read))
         old)))
 
 (define (handle-key now a-key)
@@ -242,10 +238,5 @@
                                                       (length states)))))))))))
 
 (module+ main
-  (undoable-big-bang (now (item 'character-princess-girl 2 2 false false)
-                          (call-with-input-file "world.rktd" read) 0
-                          (list (item 'gem-blue 3 2 true false)
-                                (item 'chest-open 13 12 false 'in-chest))
-                          #hash(((13 15) . (curry teleport 17 17))
-                                ((17 15) . (curry grassify 17 13))))
-                     draw handle-key))
+  (undoable-big-bang (call-with-input-file "world.rktd"
+                       (compose deserialize read)) draw handle-key))
