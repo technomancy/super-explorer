@@ -136,6 +136,9 @@
 (define (teleport x y now)
   ((now '(player x) x) '(player y) y))
 
+(define (grassify x y now)
+  (now 'world (vector-nested-set (now 'world) (list y x) 'grass)))
+
 (define (move-and-trigger now a-key)
   (let* ([moved (move now a-key)]
          [trigger (trigger-at moved (moved '(player x)) (moved '(player y)))])
@@ -233,8 +236,10 @@
                                                       (length states)))))))))))
 
 (module+ main
-  (undoable-big-bang (now (item character-princess-girl 2 2 false false)
+  (undoable-big-bang (now (item 'character-princess-girl 2 2 false false)
                           (call-with-input-file "world.rktd" read) 0
                           (list (item gem-blue 3 2 true false)
-                                (item chest-open 13 12 false in-chest)))
+                                (item chest-open 13 12 false in-chest))
+                          #hash(((13 15) . (curry teleport 17 17))
+                                ((17 15) . (curry grassify 17 13))))
                      draw handle-key))
