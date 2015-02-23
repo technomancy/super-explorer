@@ -40,9 +40,6 @@
                      (door . ,(tile door-tall-closed false 0))
                      (door-open . ,(tile door-tall-open true 0))))
 
-(define grid-size-x 20)
-(define grid-size-y 20)
-
 (define room-size-x 10)
 (define room-size-y 10)
 
@@ -69,9 +66,13 @@
 (define (truncate-to x y)
   (* (quotient x y) y))
 
+(define (vector-td v t d)
+  (let ([v2 (vector-drop v d)])
+    (vector-take v2 (min (vector-length v2) t))))
+
 (define (room-for grid item)
-  (vector-map (lambda (row) (vector-take (vector-drop row (truncate-to (item 'x) room-size-x)) room-size-x))
-              (vector-take (vector-drop grid (truncate-to (item 'y) room-size-y)) room-size-y)))
+  (vector-map (curryr vector-td room-size-x (truncate-to (item 'x) room-size-x))
+              (vector-td grid room-size-y (truncate-to (item 'y) room-size-y))))
 
 (define (same-room? item1 item2)
   (and (= (quotient (item1 'x) room-size-x) (quotient (item2 'x) room-size-x))
@@ -93,8 +94,9 @@
 (define (edit-mode? now)
   (equal? 'selector (now '(player image))))
 
-(define (out-of-bounds? item)
-  (or (> (item 'x) grid-size-x) (> (item 'y) grid-size-y)))
+(define (out-of-bounds? item now)
+  (or (> (item 'x) (vector-length (vector-ref (now 'grid) 0)))
+      (> (item 'y) (vector-length (now 'grid)))))
 
 (define (new-place item a-key)
   (cond [(key=? a-key "left") (dict-update item 'x sub1)]
@@ -130,7 +132,7 @@
 (define (move now a-key)
   (let* ([new (now 'player (new-place (now 'player) a-key))]
          [item-at-new (item-at new (new '(player x)) (new '(player y)))])
-    (cond [(out-of-bounds? (new 'player)) now]
+    (cond [(out-of-bounds? (new 'player) now) now]
           [(edit-mode? now) new]
           [(not (walkable? (now 'grid) (new '(player x)) (new '(player y)))) now]
           [(not item-at-new) new]
@@ -237,6 +239,9 @@
                              (take states (min max-undo-size
                                                (length states)))))))))))
 
-(module+ main
-  (undoable-big-bang (call-with-input-file "world.rktd"
+(define (run filename)
+  (undoable-big-bang (call-with-input-file filename
                        (compose deserialize read)) draw handle-key))
+
+(module+ main
+  (run "world.rktd"))
