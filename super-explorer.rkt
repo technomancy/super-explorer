@@ -2,6 +2,7 @@
 (require 2htdp/universe 2htdp/image 2htdp/planetcute racket/vector)
 (require (prefix-in gui: racket/gui) racket/serialize)           ; for save
 (require "fstruct.rkt")
+(provide now item draw handle-key undoable-big-bang index-of)
 
 (fstruct now (player grid tile items triggers))
 
@@ -205,8 +206,8 @@
 (define (handle-key now a-key)
   (let ([x (now '(player x))] [y (now '(player y))])
     (cond [(key=? a-key " ") (place now)] ; edit keys
-          [(key=? a-key "1") (place-item now (item gem-blue x y true false))]
-          [(key=? a-key "2") (place-item now (item chest-open x y #f in-chest))]
+          [(key=? a-key "1") (place-item now (item 'gem-blue x y true false))]
+          [(key=? a-key "2") (place-item now (item 'chest-open x y #f in-chest))]
           [(key=? a-key "\b") (delete-item now)]
           [(key=? a-key "[") (next-tile now 1)]
           [(key=? a-key "]") (next-tile now -1)]
@@ -216,7 +217,7 @@
           [(key=? a-key "r") (restore now)]
           [else (move-and-trigger now a-key)])))
 
-(define (undoable-big-bang init draw key-handler)
+(define (undoable-big-bang init draw key-handler stop)
   (let ([max-undo-size 10] [undo-key "z"])
     (big-bang (list init)
               (to-draw (lambda (states)
@@ -237,11 +238,13 @@
                        (rest states)
                        (cons (key-handler (first states) a-key)
                              (take states (min max-undo-size
-                                               (length states)))))))))))
+                                               (length states))))))))
+              (stop-when (compose stop first)))))
 
 (define (run filename)
   (undoable-big-bang (call-with-input-file filename
-                       (compose deserialize read)) draw handle-key))
+                       (compose deserialize read))
+                     draw handle-key (lambda (_) #f)))
 
 (module+ main
   (run "world.rktd"))
