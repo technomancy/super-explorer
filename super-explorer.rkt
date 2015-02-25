@@ -4,10 +4,13 @@
 (require "fstruct.rkt")
 (provide now item draw handle-key undoable-big-bang index-of)
 
-(fstruct now (player grid tile items triggers))
+(fstruct now (player grid edit items triggers))
 
 (define (index-of l x)
   (for/or ([y l] [i (in-naturals)] #:when (equal? x y)) i))
+
+(define (swap! box f . args)
+  (set-box! box (apply f (unbox box) args)))
 
 (define (vector-nested-set v indexes new) ; booooo no persistent vectors
   (let ([v (vector-copy v)])
@@ -23,6 +26,11 @@
       (dict-update d (first ks) (λ (x) (apply f x args)))
       (dict-set d (first ks) (apply dict-update-in (dict-ref d (first ks))
                                     (rest ks) f args))))
+
+(define (dict-ref-in d ks)
+  (if (empty? (rest ks))
+      (dict-ref d (first ks))
+      (dict-ref-in (dict-ref d (first ks)) (rest ks))))
 
 
 
@@ -151,7 +159,7 @@
 (define (move-and-trigger now a-key)
   (let* ([moved (move now a-key)]
          [trigger (trigger-at moved (moved '(player x)) (moved '(player y)))])
-    (if trigger
+    (if (and (not (edit-mode? now)) trigger)
         ((eval trigger) moved)
         moved)))
 
@@ -166,7 +174,8 @@
 (define (place now)
   (if (edit-mode? now)
       (now 'grid (vector-nested-set (now 'grid) (map (now 'player) '(y x))
-                                    (list-ref (hash-keys tiles) (now 'tile))))
+                                    (list-ref (hash-keys tiles)
+                                              (dict-ref-in now '(edit tile)))))
       now))
 
 (define (place-item now item)
@@ -182,13 +191,36 @@
       now))
 
 (define (next-tile now amt)
-  (now 'tile (modulo (+ amt (now 'tile)) (length (hash-keys tiles)))))
+  (dict-update-in now '(edit tile)
+                  (lambda (tile)
+                    (modulo (+ amt tile) (length (hash-keys tiles))))))
 
 (define (tile-of now)
-  (now 'tile (index-of (hash-keys tiles)
-                       (vector-ref (vector-ref (now 'grid)
-                                               (now '(player y)))
-                                   (now '(player x))))))
+  (dict-update-in now '(edit tile)
+                  (lambda (_)
+                    (index-of (hash-keys tiles)
+                              (vector-ref (vector-ref (now 'grid)
+                                                      (now '(player y)))
+                                          (now '(player x)))))))
+
+(define (add-target now)
+  (if (edit-mode? now)
+      (dict-update-in now '(edit target)
+                      (lambda _ (list (now '(player x)) (now '(player y)))))
+      now))
+
+(define (add-teleport now)
+  (let ([target (hash-ref-in now '(edit target) false)])
+    (if (and (edit-mode? now) target)
+        (let ([now (now 'grid (vector-nested-set (now 'grid)
+                                                 (map (now 'player) '(y x))
+                                                 'plain))])
+          (now 'triggers (hash-set (now 'triggers)
+                                   (list (now '(player x)) (now '(player y)))
+                                   `(curry teleport ,@target))))
+        now)))
+
+
 
 (define (save now)
   (let ([filename (gui:put-file "Save to:")])
@@ -212,13 +244,15 @@
           [(key=? a-key "[") (next-tile now 1)]
           [(key=? a-key "]") (next-tile now -1)]
           [(key=? a-key "`") (tile-of now)]
+          [(key=? a-key "T") (add-target now)]
+          [(key=? a-key "t") (add-teleport now)]
           [(key=? a-key "\t") (switch-mode now)]
           [(key=? a-key "s") (save now)]
           [(key=? a-key "r") (restore now)]
           [else (move-and-trigger now a-key)])))
 
 (define (undoable-big-bang init draw key-handler stop)
-  (let ([max-undo-size 10] [undo-key "z"])
+  (let ([max-undo-size 100] [undo-key "z"])
     (big-bang (list init)
               (to-draw (lambda (states)
                          (with-handlers ([exn:fail?
@@ -247,4 +281,4 @@
                      draw handle-key (lambda (_) #f)))
 
 (module+ main
-  (run "world.rktd"))
+  (begin (run "world.rktd") #t))

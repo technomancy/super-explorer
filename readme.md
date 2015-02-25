@@ -16,8 +16,8 @@ Edit mode:
 
 ## License
 
-Code © 2015 Phil Hagelberg
+Code copyright © 2015 Phil Hagelberg
 
 Distributed under the GNU General Public License version 3; see file COPYING.
 
-Microban levels © 2000 David Skinner.
+Microban levels copyright © 2000 David Skinner.
