@@ -157,6 +157,10 @@
 (define (tileify tile x y now)
   (now 'grid (vector-nested-set (now 'grid) (list y x) tile)))
 
+(define (say message now)
+  (gui:message-box "super explorer" message)
+  now)
+
 (define (move-and-trigger now a-key)
   (let* ([moved (move now a-key)]
          [trigger (trigger-at moved (moved '(player x)) (moved '(player y)))])
@@ -221,6 +225,17 @@
                                    `(curry teleport ,@target))))
         now)))
 
+(define (add-say now)
+  (if (edit-mode? now)
+      (let ([message (gui:get-text-from-user "Message" "Message: ")])
+        (if message
+            (now 'triggers
+                 (dict-set (now 'triggers)
+                           (list (now '(player x)) (now '(player y)))
+                           `(curry say ,message)))
+            now))
+      now))
+
 (define (add-tileify now)
   (if (edit-mode? now)
       (dict-update-in now (cons 'triggers (map (now 'player) '(y x)))
@@ -256,6 +271,7 @@
           [(key=? a-key "T") (add-target now)]
           [(key=? a-key "t") (add-teleport now)]
           [(key=? a-key "l") (add-tileify now)]
+          [(key=? a-key "y") (add-say now)]
           [(key=? a-key "\t") (switch-mode now)]
           [(key=? a-key "s") (save now)]
           [(key=? a-key "r") (restore now)]
