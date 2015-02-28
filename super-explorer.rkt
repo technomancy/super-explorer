@@ -27,6 +27,7 @@
       (dict-set d (first ks) (apply dict-update-in (dict-ref d (first ks))
                                     (rest ks) f args))))
 
+;; TODO: need optional last arg
 (define (dict-ref-in d ks)
   (if (empty? (rest ks))
       (dict-ref d (first ks))
@@ -153,8 +154,8 @@
 (define (teleport x y now)
   ((now '(player x) x) '(player y) y))
 
-(define (grassify x y now)
-  (now 'grid (vector-nested-set (now 'grid) (list y x) 'grass)))
+(define (tileify tile x y now)
+  (now 'grid (vector-nested-set (now 'grid) (list y x) tile)))
 
 (define (move-and-trigger now a-key)
   (let* ([moved (move now a-key)]
@@ -210,7 +211,7 @@
       now))
 
 (define (add-teleport now)
-  (let ([target (hash-ref-in now '(edit target) false)])
+  (let ([target (dict-ref-in now '(edit target) false)])
     (if (and (edit-mode? now) target)
         (let ([now (now 'grid (vector-nested-set (now 'grid)
                                                  (map (now 'player) '(y x))
@@ -219,6 +220,14 @@
                                    (list (now '(player x)) (now '(player y)))
                                    `(curry teleport ,@target))))
         now)))
+
+(define (add-tileify now)
+  (if (edit-mode? now)
+      (dict-update-in now (cons 'triggers (map (now 'player) '(y x)))
+                      (lambda _ (append '(curry tileify)
+                                        (dict-ref-in now '(edit target)
+                                                     (map (now 'player) '(y x))))))
+      now))
 
 
 
@@ -246,6 +255,7 @@
           [(key=? a-key "`") (tile-of now)]
           [(key=? a-key "T") (add-target now)]
           [(key=? a-key "t") (add-teleport now)]
+          [(key=? a-key "l") (add-tileify now)]
           [(key=? a-key "\t") (switch-mode now)]
           [(key=? a-key "s") (save now)]
           [(key=? a-key "r") (restore now)]
