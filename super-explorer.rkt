@@ -65,6 +65,7 @@
 
 
 (define (draw-row row-tiles items)
+  ;; TODO: beside has min arity of 1
   (for/fold ([image (apply beside (for/list ([tile-name row-tiles])
                                     (tile-image (hash-ref tiles tile-name))))])
             ([item items])
@@ -244,6 +245,24 @@
                                                      (map (now 'player) '(y x))))))
       now))
 
+(define ((resize-tile grid row) x)
+  (dict-ref (dict-ref grid row (make-vector x 'grass)) x 'grass))
+
+(define (resize-row new-x grid row)
+  (build-vector new-x (resize-tile grid row)))
+
+(define (resize now)
+  (let ([new-x (gui:get-text-from-user
+                "width "(format "New width: (currently ~s)"
+                                (vector-length (vector-ref (now 'grid) 0))))]
+        [new-y (gui:get-text-from-user
+                "height "(format "New height: (currently ~s)"
+                                 (vector-length (now 'grid))))])
+    (if (and new-x new-y)
+        (let ([new-x (string->number new-x)] [new-y (string->number new-y)])
+          (now 'grid (build-vector new-y (curry resize-row new-x (now 'grid)))))
+        now)))
+
 
 
 (define (save now)
@@ -273,6 +292,7 @@
           [(key=? a-key "l") (add-tileify now)]
           [(key=? a-key "y") (add-say now)]
           [(key=? a-key "\t") (switch-mode now)]
+          [(key=? a-key "Z") (resize now)]
           [(key=? a-key "s") (save now)]
           [(key=? a-key "r") (restore now)]
           [else (move-and-trigger now a-key)])))
